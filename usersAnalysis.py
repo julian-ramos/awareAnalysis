@@ -67,8 +67,8 @@ def sessionsExtract(cnx,scale=1000.0,screenTable='screen',appsHistTable='applica
                 start=False
                 end=False
             #userid,id_start,id_end,timestampStart, timestampEnd, Duration
-                numApps=numAppsxSessions(cnx, ts, te, device_id, appsHistTable,tablename)
-                sessions.append([usr,ids,ide,ts,te,(te-ts)/scale,numApps])
+                #numApps=numAppsxSessions(cnx, ts, te, device_id, appsHistTable,tablename)
+                sessions.append([usr,ids,ide,ts,te,(te-ts)/scale])
                 
     #Now the sessions data has been extracted we can write it on the database as a new table
     #If the table already exists drop it
@@ -83,14 +83,14 @@ def sessionsExtract(cnx,scale=1000.0,screenTable='screen',appsHistTable='applica
         print('%s table was erased!'%(tablename))
     
     queryText=('CREATE TABLE %s (id MEDIUMINT NOT NULL AUTO_INCREMENT, device_id VARCHAR(40), id_start INT ,  id_end INT ,'%(tablename)+ 
-               'timestamp_start DOUBLE , timestamp_end DOUBLE , duration FLOAT, PRIMARY KEY (id)),numApps INT')
+               'timestamp_start DOUBLE , timestamp_end DOUBLE , duration FLOAT, PRIMARY KEY (id))')
     dbC.query(queryText, cnx) 
     cnx.commit()
     #Inserting the data into the table
     for i in range(len(sessions)):
         id,ids,ide,ts,te,d,numApps=sessions[i]
         queryText=('INSERT INTO sessions (device_id,id_start,id_end,timestamp_start,timestamp_end,duration,numApps) '+
-                   'VALUES ("%s",%d,%d,%.6f,%.6f,%f,%d)'%(id,ids,ide,ts,te,d,numApps))
+                   'VALUES ("%s",%d,%d,%.6f,%.6f,%f)'%(id,ids,ide,ts,te,d))
         dbC.query(queryText, cnx)
     cnx.commit()
     print('done inserting data')
@@ -149,11 +149,123 @@ def app2cats(cnx,database,appsHistTable,tablename='applications_history2',update
     return True
     
     
-def sessionJoinAppHist(cnx,tablename,appsHistTable,sessionsTable):
-    queryText=('select * from %s '%(sessionsTable)+
-               'inner JOIN %s '%(appsHistTable)+  
-               'ON %s.timestamp>=%s.timestamp_start and '%(appsHistTable,sessionsTable)+
-               '%s.double_end_timestamp<=%s.timestamp_end'%(appsHistTable,sessionsTable))    
+def sessionJoinAppHist(cnx,appsHistTable='applications_history',sessionsTable='sessions'):
+    '''
+    This function extracts further statistics from the sessions extracted
+    by the sessionExtract method
+    '''
+    
+    #The join between two temporary tables created to extract the applicatiosn history and the sessions is really fast
+    #the only thing I have to be careful about is about filtering out system apps and apss according to process importance
+    
+    usrsList=dbC.getUsers(cnx,'sessions')
+    tablesList=dbC.getTables(cnx)
+    
+    if 'tempJoin' in tablesList:
+        queryText=('drop table tempJoin')
+        dbC.query(queryText,cnx)
+        print('erasing previous tempJoin table')
+#         cnx.commit()
+    
+    
+
+    
+    for usr in usrsList:
+        #Erase any temp tables if they exist
+        tablesList=dbC.getTables(cnx)
+        if 'tempApps' in tablesList:
+            queryText=('drop table tempApps')
+            dbC.query(queryText,cnx)
+            cnx.commit()
+            
+        if 'tempSess' in tablesList:
+            queryText=('drop table tempSess')
+            dbC.query(queryText,cnx)
+            cnx.commit()
+            
+        if 'tempJoin' in tablesList:
+#         queryText=('drop table tempJoin')
+#         dbC.query(queryText,cnx)
+#         cnx.commit()
+            tempJoinFlg=True
+        else:
+            tempJoinFlg=False
+
+        #Create temp applications history table
+        queryText=('create table tempApps select * from %s where device_id="%s" '%(appsHistTable,usr)+
+                   'and process_importance=100 and is_system_app=0 '+ 
+                   'and application_name !="securacy" and application_name !="AWARE"')
+        dbC.query(queryText,cnx)
+        cnx.commit()
+        
+        
+        #Create temp sessions
+        queryText=('create table tempSess select * from %s where device_id="%s"'%(sessionsTable,usr))
+        dbC.query(queryText,cnx)
+        cnx.commit()
+        
+        
+        if tempJoinFlg==True:
+            queryText=('insert ignore into tempJoin select '+
+                       'tempApps.device_id, '+
+                       'tempApps.timestamp as apps_timestamp_start, '+ 
+                       'tempApps.double_end_timestamp as apps_timestamp_end, '+
+                       'tempApps.package_name, '+
+                       'tempApps.application_name, '+
+                       'tempApps._id, '+
+                       'tempSess.id_start, '+
+                       'tempSess.id_end, '+     
+                       'tempSess.duration, '+
+                       'tempSess.timestamp_start as sess_timestamp_start, '+
+                       'tempSess.timestamp_end as sess_timestamp_end '+ 
+                       'from tempApps join tempSess on '+
+                       'tempApps.timestamp>=tempSess.timestamp_start and '+
+                       'tempApps.double_end_timestamp<=tempSess.timestamp_end '
+                       )
+            count+=1
+            print('appending ---progress[%f]'%(100.0*count/len(usrsList)))
+            dbC.query(queryText,cnx)
+            cnx.commit()
+            
+        else:
+            #Create table with the join of the two tables
+            queryText=('create table tempJoin select '+
+                       'tempApps.device_id, '+
+                       'tempApps.timestamp as apps_timestamp_start, '+ 
+                       'tempApps.double_end_timestamp as apps_timestamp_end, '+
+                       'tempApps.package_name, '+
+                       'tempApps.application_name, '+
+                       'tempApps._id, '+
+                       'tempSess.id_start, '+
+                       'tempSess.id_end, '+     
+                       'tempSess.duration, '+
+                       'tempSess.timestamp_start as sess_timestamp_start, '+
+                       'tempSess.timestamp_end as sess_timestamp_end '+ 
+                       'from tempApps join tempSess on '+
+                       'tempApps.timestamp>=tempSess.timestamp_start and '+
+                       'tempApps.double_end_timestamp<=tempSess.timestamp_end '
+                       )
+            print('creating tempJoin')
+            dbC.query(queryText,cnx)
+            cnx.commit()
+            count=1
+            
+    
+    #last comment
+    #Erase old comments
+    #check that the join is working fine
+    #once that is done we are good to go
+        
+    #go through each of the users data and create a temporary
+    #sessions and applications history table
+    #the applications history table should already
+    #have filtered out by process importance and by system app
+    
+    
+#     queryText=('select * from %s '%(sessionsTable)+
+#                'inner JOIN %s '%(appsHistTable)+  
+#                'ON %s.timestamp>=%s.timestamp_start and '%(appsHistTable,sessionsTable)+
+#                '%s.double_end_timestamp<=%s.timestamp_end'%(appsHistTable,sessionsTable))    
     
     
 def numAppsxSessions(cnx,ts,te,device_id,appsHistTable,sessionsTable):
@@ -165,6 +277,9 @@ def numAppsxSessions(cnx,ts,te,device_id,appsHistTable,sessionsTable):
                %(appsHistTable,ts,te,device_id))
     res=dbC.query(queryText, cnx)
     return res[0][0]
+
+
+
     
     
 def sessionsStats(cnx):
@@ -172,6 +287,11 @@ def sessionsStats(cnx):
     This function executes several statistics on the sessions found
     accross all users
     '''
+    
+    
+    
+    
+    
     queryText=('select duration from sessions')
     data=np.array(dbC.query(queryText, cnx))
     data=[i[0] for i in data]
@@ -221,14 +341,14 @@ if __name__=='__main__':
     database='securacy'
         
     cnx=connect2Database()
-    
+    sessionJoinAppHist(cnx)
     #ONLY NEED TO EXECUTE ONCE
     #WILL DROP TABLES!
 #     ans=raw_input('do you really want to rewrite/write the'+
 #                 'sessions and categories tables?')
 #     if 'y' in ans or 'Y' in ans:
 #         app2cats(cnx, database,'applications_history',tablename='categories')
-    sessionsExtract(cnx,tablename='sessions')
+#     sessionsExtract(cnx,tablename='sessions')
     
 #     #Setting up longer query times
 #     queryText=('SET GLOBAL connect_timeout=1000')
