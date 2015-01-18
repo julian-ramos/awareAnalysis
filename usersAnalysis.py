@@ -40,7 +40,7 @@ def sessionsExtract(cnx,scale=1000.0,screenTable='screen',appsHistTable='applica
         data=dbC.query(queryText, cnx)
         start=False
         end=False
-        print('Extracting session for user %s --progress %f'%(usr,1.0*usrsList.index(usr)/len(usrsList)))
+        print('Extracting session for user %s --progress %.1f'%(usr,1.0*usrsList.index(usr)/len(usrsList)))
         if header['_id']==0:
             #This step makes sure that the data points
             #are sorted so that we can now extract sessions from the data
@@ -149,7 +149,7 @@ def app2cats(cnx,database,appsHistTable,tablename='applications_history2',update
     return True
     
     
-def sessionJoinAppHist(cnx,appsHistTable='applications_history',sessionsTable='sessions'):
+def sessionJoinAppHist(cnx,tablename='tempJoin',appsHistTable='applications_history',sessionsTable='sessions'):
     '''
     This function extracts further statistics from the sessions extracted
     by the sessionExtract method
@@ -161,10 +161,10 @@ def sessionJoinAppHist(cnx,appsHistTable='applications_history',sessionsTable='s
     usrsList=dbC.getUsers(cnx,'sessions')
     tablesList=dbC.getTables(cnx)
     
-    if 'tempJoin' in tablesList:
-        queryText=('drop table tempJoin')
+    if tablename in tablesList:
+        queryText=('drop table %s'%(tablename))
         dbC.query(queryText,cnx)
-        print('erasing previous tempJoin table')
+        print('erasing previous %s table'%(tablename))
 #         cnx.commit()
     
     
@@ -183,7 +183,7 @@ def sessionJoinAppHist(cnx,appsHistTable='applications_history',sessionsTable='s
             dbC.query(queryText,cnx)
             cnx.commit()
             
-        if 'tempJoin' in tablesList:
+        if tablename in tablesList:
 #         queryText=('drop table tempJoin')
 #         dbC.query(queryText,cnx)
 #         cnx.commit()
@@ -206,13 +206,14 @@ def sessionJoinAppHist(cnx,appsHistTable='applications_history',sessionsTable='s
         
         
         if tempJoinFlg==True:
-            queryText=('insert ignore into tempJoin select '+
+            queryText=('insert ignore into %s select '%(tablename)+
                        'tempApps.device_id, '+
                        'tempApps.timestamp as apps_timestamp_start, '+ 
                        'tempApps.double_end_timestamp as apps_timestamp_end, '+
                        'tempApps.package_name, '+
                        'tempApps.application_name, '+
                        'tempApps._id, '+
+                       'tempSess.id as session_id, '+
                        'tempSess.id_start, '+
                        'tempSess.id_end, '+     
                        'tempSess.duration, '+
@@ -223,19 +224,20 @@ def sessionJoinAppHist(cnx,appsHistTable='applications_history',sessionsTable='s
                        'tempApps.double_end_timestamp<=tempSess.timestamp_end '
                        )
             count+=1
-            print('appending ---progress[%f]'%(100.0*count/len(usrsList)))
+            print('appending ---progress[%.1f %]'%(100.0*count/len(usrsList)))
             dbC.query(queryText,cnx)
             cnx.commit()
             
         else:
             #Create table with the join of the two tables
-            queryText=('create table tempJoin select '+
+            queryText=('create table %s select '%(tablename)+
                        'tempApps.device_id, '+
                        'tempApps.timestamp as apps_timestamp_start, '+ 
                        'tempApps.double_end_timestamp as apps_timestamp_end, '+
                        'tempApps.package_name, '+
                        'tempApps.application_name, '+
                        'tempApps._id, '+
+                       'tempSess.id as session_id, '+
                        'tempSess.id_start, '+
                        'tempSess.id_end, '+     
                        'tempSess.duration, '+
@@ -245,7 +247,7 @@ def sessionJoinAppHist(cnx,appsHistTable='applications_history',sessionsTable='s
                        'tempApps.timestamp>=tempSess.timestamp_start and '+
                        'tempApps.double_end_timestamp<=tempSess.timestamp_end '
                        )
-            print('creating tempJoin')
+            print('creating %s'%(tablename))
             dbC.query(queryText,cnx)
             cnx.commit()
             count=1
@@ -278,6 +280,16 @@ def numAppsxSessions(cnx,ts,te,device_id,appsHistTable,sessionsTable):
     res=dbC.query(queryText, cnx)
     return res[0][0]
 
+def catsTable(targetTable,tablename,column='package_name',id='session_id'):
+    '''
+    Creates a categories table using the data from a join table between 
+    apps history and sessions. This table must be specified on targetTable
+    Column corresponds to the package or application name column. 
+    tablename is the name assigned to the output table
+    '''
+    queryText=('select %s,%s from %s'%(column,session_id,targetTable))
+    data=dbC.query(queryText,cnx)
+    
 
 
     
@@ -341,7 +353,7 @@ if __name__=='__main__':
     database='securacy'
         
     cnx=connect2Database()
-    sessionJoinAppHist(cnx)
+    sessionJoinAppHist(cnx,tablename='sessJoinApps')
     #ONLY NEED TO EXECUTE ONCE
     #WILL DROP TABLES!
 #     ans=raw_input('do you really want to rewrite/write the'+
