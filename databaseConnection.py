@@ -1,5 +1,6 @@
 import dataOps as dO
 import pymysql
+import ConfigParser
 
 def colsLabel2Index(cnx,database,tablename):
     '''
@@ -87,10 +88,14 @@ def query(queryText,cnx):
         data.append(list(retrievedData))
     return data
 
-def connectToDatabase(databaseName):
-    cnx = pymysql.connect(user='root', password='fingers@123',
-                              host='localhost',
-                              database=databaseName)
+def connectToDatabase(config):
+    user = config.get('sql_info', 'user')
+    password = config.get('sql_info', 'password')
+    host = config.get('sql_info', 'host')
+    database = config.get('sql_info', 'database')
+    cnx = pymysql.connect(user=user, password=password,
+                              host=host,
+                              database=database)
     return cnx
 
 def disconnectFromDatabase(cnx):
@@ -99,9 +104,10 @@ def disconnectFromDatabase(cnx):
 
 
 if __name__=="__main__":
-    database='securacy'
-    cnx=connectToDatabase(database)
-    tablename="applications_history"
+    config = ConfigParser.ConfigParser()
+    config.read('config.ini')
+    cnx=connectToDatabase(config)
+    tablename='applications_history'
     info=getColumnsInfo(cnx,database , tablename)
     copyTable(cnx, tablename, 'copied_table')   
     
