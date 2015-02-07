@@ -7,7 +7,7 @@ import re
 This set of functions provides static information like
 the category of a given app in googlePlay
 '''
-     
+
 
 def getCat(appName):
     '''
@@ -15,44 +15,43 @@ def getCat(appName):
     when it is not already stored in its own file (categoriesLib.dat)
     Also, it updates this file when a new app is observed
     '''
-    
-    #First load the dictionary where the apps have been stored
-    listOfFiles=os.listdir('.')
-    
+
+    # First load the dictionary where the apps have been stored
+    listOfFiles = os.listdir('.')
+
     if 'categoriesLib.dat' in listOfFiles:
-        file=open('categoriesLib.dat','rb')
-        categsLoader=pickle.load(file)
+        file = open('categoriesLib.dat', 'rb')
+        categsLoader = pickle.load(file)
         file.close()
     else:
-        categsLoader={}
-        
+        categsLoader = {}
+
     if appName in categsLoader.keys():
         return categsLoader[appName]
     else:
-        target = 'https://play.google.com/store/apps/details?id=%s&hl=en' % (appName)
+        target = 'https://play.google.com/store/apps/details?id=%s&hl=en' % (
+            appName)
         try:
             html = urllib2.urlopen(target).read()
             pat = r'<span itemprop="genre">(.*?)</span>'
             cate = re.findall(pat, html)
-            cate=cate[0]
-            
-            categsLoader[appName]=cate
-            file=open('categoriesLib.dat','wb')
+            cate = cate[0]
+
+            categsLoader[appName] = cate
+            file = open('categoriesLib.dat', 'wb')
             pickle.dump(categsLoader, file)
             file.close()
-            
+
             return cate
-        
+
         except urllib2.HTTPError:
-            cate='Unknown'
-            categsLoader[appName]=cate
-            file=open('categoriesLib.dat','wb')
+            cate = 'Unknown'
+            categsLoader[appName] = cate
+            file = open('categoriesLib.dat', 'wb')
             pickle.dump(categsLoader, file)
             file.close()
             return 'Unknown'
 
 
-
-    
-if __name__=='__main__':
+if __name__ == '__main__':
     print(getCat('com.pixelberrystudios.hwuandroid'))
