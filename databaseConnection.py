@@ -3,18 +3,19 @@ import pymysql
 import ConfigParser
 
 
-def colsLabel2Index(cnx, database, tablename):
+def colsLabel2Index(cnx, config):
     '''
     This function returns a dictionary that takes the label
     of a given column and returns its index
     '''
 
-    temp = getColumns(cnx, database, tablename)
+    temp = getColumns(cnx, config)
     header = dO.list2Dict(temp)
     return header
 
 
-def copyTable(cnx, tablename, newtable):
+def copyTable(cnx, config, newtable):
+    tablename = config.get('sql_info', 'tablename')
     queryText = ('show create table %s' % (tablename))
     strQuery = query(queryText, cnx)
     ind = strQuery[0][1].find(tablename)
@@ -31,12 +32,13 @@ def copyTable(cnx, tablename, newtable):
         return False
 
 
-def getCatsFromTimes(timestampStart, timestampEnd, usr, cnx, tablename='applications_history'):
+def getCatsFromTimes(timestampStart, timestampEnd, usr, cnx, config):
     '''
     This method returns the categories of the applications used by a user
     between the given timestamps it assumes the table contains the category
     field
     '''
+    tablename = config.get('sql_info', 'tablename')
     queryText = ('select timestamp, double_end_timestamp, category from %s' % (tablename) +
                  ' where device_id="%s" and timestamp between %f and %f' % (usr, timestampStart, timestampEnd))
     data = query(queryText, cnx)
@@ -44,14 +46,16 @@ def getCatsFromTimes(timestampStart, timestampEnd, usr, cnx, tablename='applicat
     return data, header
 
 
-def getApps(cnx, tablename):
+def getApps(cnx, config):
+    tablename = config.get('sql_info', 'tablename')
     queryText = ('select distinct(package_name) from %s ' % (tablename))
     idList = query(queryText, cnx)
     idList = [i[0] for i in idList]
     return idList
 
 
-def getIds(cnx, tablename):
+def getIds(cnx, config):
+    tablename = config.get('sql_info', 'tablename')
     queryText = ('select distinct(_id) from %s ' % (tablename))
     idList = query(queryText, cnx)
     idList = [i[0] for i in idList]
@@ -65,14 +69,17 @@ def getTables(cnx):
     return tablesList
 
 
-def getUsers(cnx, tablename):
+def getUsers(cnx, config):
+    tablename = config.get('sql_info', 'tablename')
     queryText = ('select distinct(device_id) from %s ' % (tablename))
     usrsList = query(queryText, cnx)
     usrsList = [i[0] for i in usrsList]
     return usrsList
 
 
-def getColumns(cnx, database, tablename):
+def getColumns(cnx, config):
+    database = config.get('sql_info', 'database')
+    tablename = config.get('sql_info', 'tablename')
     queryText = ('SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA="%s" AND TABLE_NAME="%s"'
                  % (database, tablename))
     info = query(queryText, cnx)
@@ -80,7 +87,9 @@ def getColumns(cnx, database, tablename):
     return info
 
 
-def getColumnsInfo(cnx, database, tablename):
+def getColumnsInfo(cnx, config):
+    database = config.get('sql_info', 'database')
+    tablename = config.get('sql_info', 'tablename')
     queryText = ('show columns from %s.%s'
                  % (database, tablename))
     info = query(queryText, cnx)
@@ -117,6 +126,5 @@ if __name__ == "__main__":
     config = ConfigParser.ConfigParser()
     config.read('config.ini')
     cnx = connectToDatabase(config)
-    tablename = 'applications_history'
-    info = getColumnsInfo(cnx, database, tablename)
-    copyTable(cnx, tablename, 'copied_table')
+    info = getColumnsInfo(cnx, config)
+    copyTable(cnx, config, 'copied_table')
