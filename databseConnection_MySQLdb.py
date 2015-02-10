@@ -13,6 +13,7 @@ def connectToDatabase(config):
                           db=database)
     return cnx
 
+
 def disconnectFromDatabase(cnx):
     cnx.close()
 
@@ -24,26 +25,23 @@ def query(queryText, cnx):
     return data
 
 
-def getColumnsInfo(cnx, config):
+def getColumnsInfo(cnx, config, tablename):
     database = config.get('sql_info', 'database')
-    tablename = config.get('sql_info', 'tablename')
     queryText = 'SHOW COLUMNS FROM %s.%s' % (database, tablename)
     info = query(queryText, cnx)
     info = [i[0:2] for i in info]
     return info
 
 
-def getColumns(cnx, config):
+def getColumns(cnx, config, tablename):
     database = config.get('sql_info', 'database')
-    tablename = config.get('sql_info', 'tablename')
     queryText = 'SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA="%s" AND TABLE_NAME="%s"' % (database, tablename)
     info = query(queryText, cnx)
     info = [i[0] for i in info]
     return info
 
 
-def getUsers(cnx, config):
-    tablename = config.get('sql_info', 'tablename')
+def getUsers(cnx, tablename):
     queryText = 'SELECT DISTINCT device_id FROM %s ' % (tablename)
     usrsList = query(queryText, cnx)
     usrsList = [i[0] for i in usrsList]
@@ -57,36 +55,32 @@ def getTables(cnx):
     return tablesList
 
 
-def getIds(cnx, config):
-    tablename = config.get('sql_info', 'tablename')
+def getIds(cnx, tablename):
     queryText = 'SELECT DISTINCT _id from %s' % (tablename)
     idList = query(queryText, cnx)
     idList = [i[0] for i in idList]
     return idList
 
 
-def getApps(cnx, config):
-    tablename = config.get('sql_info', 'tablename')
+def getApps(cnx, tablename):
     queryText = 'SELECT DISTINCT package_name FROM %s' % (tablename)
     idList = query(queryText, cnx)
     idList = [i[0] for i in idList]
     return idList
 
-def getCatsFromTimes(timestampStart, timestampEnd, usr, cnx, config):
+def getCatsFromTimes(timestampStart, timestampEnd, usr, cnx, tablename):
     '''
     This method returns the categories of the applications used by a user
     between the given timestamps it assumes the table contains the category
     field
     '''
-    tablename = config.get('sql_info', 'tablename')
     queryText = 'SELECT timestamp, double_end_timestamp, category FROM %s' % (tablename) + ' WHERE device_id="%s" AND timestamp BETWEEN %f AND %f' % (usr, timestampStart, timestampEnd)
     data = query(queryText, cnx)
     header = 'timestamp, double_end_timestamp, category'.split(',')
     return data, header
 
 
-def copyTable(cnx, config, newtable):
-    tablename = config.get('sql_info', 'tablename')
+def copyTable(cnx, tablename, newtable):
     queryText = 'SHOW CREATE TABLE %s' % (tablename)
     strQuery = query(queryText, cnx)
     ind = strQuery[0][1].find(tablename)
@@ -117,6 +111,7 @@ def colsLabel2Index(cnx, config):
 if __name__ == "__main__":
     config = ConfigParser.ConfigParser()
     config.read('config.ini')
+    tablename = 'applications_history'
     cnx = connectToDatabase(config)
-    info = getColumnsInfo(cnx, config)
+    info = getColumnsInfo(cnx, config, tablename)
     copyTable(cnx, config, 'copied_table')
